@@ -2,8 +2,8 @@
 
 The Windows build uses the local Tailscale adapter for direct TCP sessions. The
 home page reads devices and online status from the local Tailscale service.
-The separate port test checks TCP reachability. A successful test does not
-verify RustDesk authentication.
+The port test checks TCP reachability. Establish a desktop session to verify
+RustDesk authentication.
 
 ## GitHub and upstream
 
@@ -20,7 +20,7 @@ git push origin custom/tailnet
 
 The home-page update button compares the build with GitHub's latest stable
 RustDesk release. It sends a version lookup to `api.github.com` when clicked
-and installs nothing. RustDesk registration, relay, NAT probes, account
+and displays the release version. RustDesk registration, relay, NAT probes, account
 requests, LAN discovery, and automatic updates are disabled in this build.
 The separate Tailscale service still uses its own control plane and may use
 DERP when it cannot establish a direct path.
@@ -38,7 +38,7 @@ Keep the complete Release directory together and rename its runner to
 
 Run the import under the Windows account that uses RustDesk. It copies the
 local configuration, password material, and available peer history into
-`%APPDATA%\RustDeskTailnet\config`. Existing destination files are preserved.
+`%APPDATA%\RustDeskTailnet\config`. The import fills missing destination files.
 Repeat on the controller to import that machine's own saved preferences and
 history. Keep both configuration directories outside source control.
 

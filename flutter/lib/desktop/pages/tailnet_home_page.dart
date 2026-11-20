@@ -126,10 +126,12 @@ class _TailnetHomePageState extends State<TailnetHomePage> {
           ? null
           : '$programFiles\\Tailscale\\tailscale.exe';
       if (executable == null || !await File(executable).exists()) return;
-      final result =
-          await Process.run(executable, ['status', '--json']).timeout(
-        const Duration(seconds: 5),
-      );
+      final result = await Process.run(
+        executable,
+        ['status', '--json'],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      ).timeout(const Duration(seconds: 5));
       if (result.exitCode != 0) return;
       final state = jsonDecode(result.stdout as String) as Map<String, dynamic>;
       running = state['BackendState'] == 'Running';
