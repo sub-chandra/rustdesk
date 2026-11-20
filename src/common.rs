@@ -693,6 +693,9 @@ impl Drop for CheckTestNatType {
 }
 
 pub fn test_nat_type() {
+    if crate::tailnet::ENABLED {
+        return;
+    }
     test_ipv6_sync();
     use std::sync::atomic::{AtomicBool, Ordering};
     std::thread::spawn(move || {
@@ -870,6 +873,9 @@ async fn test_rendezvous_server_() {
 }
 
 pub fn test_rendezvous_server() {
+    if crate::tailnet::ENABLED {
+        return;
+    }
     std::thread::spawn(test_rendezvous_server_);
 }
 
@@ -1177,6 +1183,9 @@ fn process_software_update_check_response(bytes: Bytes) -> ResultType<()> {
 // Because the url is always `https://api.rustdesk.com/version/latest`.
 #[tokio::main(flavor = "current_thread")]
 pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
+    if crate::tailnet::ENABLED {
+        bail!("Automatic upstream updates are disabled");
+    }
     let (request, url) =
         hbb_common::version_check_request(hbb_common::VER_TYPE_RUSTDESK_CLIENT.to_string());
     let proxy_conf = Config::get_socks();
@@ -1680,6 +1689,9 @@ where
 /// - 4xx responses are returned as-is (server is reachable, business logic error).
 /// - If fallback also fails, returns the original HTTP result (text or error).
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
+    if crate::tailnet::ENABLED {
+        bail!("RustDesk web services are disabled");
+    }
     with_tcp_proxy_fallback(
         &url,
         "POST",
@@ -1714,6 +1726,9 @@ pub async fn post_request_with_status(
     body: String,
     header: &str,
 ) -> ResultType<(u16, String)> {
+    if crate::tailnet::ENABLED {
+        bail!("RustDesk web services are disabled");
+    }
     if should_use_raw_tcp_for_api(&url) {
         return post_request_via_tcp_proxy_status(&url, &body, header).await;
     }
@@ -2005,6 +2020,9 @@ pub async fn http_request_sync(
     body: Option<String>,
     header: String,
 ) -> ResultType<String> {
+    if crate::tailnet::ENABLED {
+        bail!("RustDesk web services are disabled");
+    }
     with_tcp_proxy_fallback(
         &url,
         &method,

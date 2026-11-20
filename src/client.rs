@@ -436,6 +436,26 @@ impl Client {
         if config::is_incoming_only() && !is_switch_sides_back(conn_type, &interface).await {
             bail!("Incoming only mode");
         }
+        #[cfg(windows)]
+        if crate::tailnet::ENABLED {
+            let destination =
+                crate::tailnet::endpoint(peer).context("Enter a Tailscale IP address")?;
+            if !crate::tailnet::route_uses_adapter(destination.ip()) {
+                bail!("Tailscale has no route to this device");
+            }
+            let source = crate::tailnet::adapter_addresses()
+                .into_iter()
+                .find(|ip| ip.is_ipv4() == destination.is_ipv4())
+                .context("Tailscale adapter is unavailable")?;
+            let source = std::net::SocketAddr::new(source, 0);
+            let stream =
+                hbb_common::tcp::FramedStream::new(destination, Some(source), 5_000).await?;
+            return Ok((
+                (Stream::Tcp(stream), true, None, None, "TCP"),
+                (0, String::new()),
+                false,
+            ));
+        }
         // to-do: remember the port for each peer, so that we can retry easier
         if hbb_common::is_ip_str(peer) {
             return Ok((
@@ -5347,6 +5367,10 @@ pub mod peer_online {
     };
 
     pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
+        if crate::tailnet::ENABLED {
+            f(Vec::new(), ids);
+            return;
+        }
         let test = false;
         if test {
             sleep(1.5).await;

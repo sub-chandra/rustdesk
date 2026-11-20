@@ -48,6 +48,8 @@ pub fn core_main() -> Option<CoreMainAction> {
     }
     crate::load_custom_client();
     #[cfg(windows)]
+    crate::tailnet::configure();
+    #[cfg(windows)]
     if !crate::platform::windows::bootstrap() {
         // return None to terminate the process
         return None;

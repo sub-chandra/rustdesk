@@ -2694,6 +2694,9 @@ impl Connection {
 
     #[inline]
     pub fn is_permission_enabled_locally(enable_prefix_option: &str) -> bool {
+        if crate::tailnet::ENABLED && enable_prefix_option == keys::OPTION_ENABLE_TUNNEL {
+            return false;
+        }
         #[cfg(feature = "flutter")]
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {

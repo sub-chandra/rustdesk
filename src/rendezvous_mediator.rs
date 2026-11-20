@@ -310,6 +310,25 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
+        #[cfg(windows)]
+        {
+            if config::is_outgoing_only() {
+                std::future::pending::<()>().await;
+            }
+            check_zombie();
+            scrap::codec::test_av1();
+            let server = new_server();
+            let ipv4 = server.clone();
+            tokio::spawn(async move { direct_server(ipv4, Some(true)).await });
+            direct_server(server, Some(false)).await;
+            return;
+        }
+        #[cfg(not(windows))]
+        Self::start_rendezvous_services().await;
+    }
+
+    #[cfg(not(windows))]
+    async fn start_rendezvous_services() {
         crate::test_nat_type();
         if config::is_outgoing_only() {
             loop {
@@ -328,7 +347,7 @@ impl RendezvousMediator {
         }
         let server_cloned = server.clone();
         tokio::spawn(async move {
-            direct_server(server_cloned).await;
+            direct_server(server_cloned, None).await;
         });
         #[cfg(target_os = "android")]
         let start_lan_listening = true;
@@ -1400,17 +1419,44 @@ fn get_direct_port() -> i32 {
     port
 }
 
-async fn direct_server(server: ServerPtr) {
+async fn direct_server(server: ServerPtr, _ipv4: Option<bool>) {
     let mut listener = None;
-    let mut port = 0;
+    let mut bind_addr = None;
     loop {
+        let stopped = option2bool("stop-service", &Config::get_option("stop-service"));
+        #[cfg(windows)]
+        if stopped && _ipv4 == Some(true) {
+            server.write().unwrap().close_connections();
+        }
         let disabled = !option2bool(
             OPTION_DIRECT_SERVER,
             &Config::get_option(OPTION_DIRECT_SERVER),
-        ) || option2bool("stop-service", &Config::get_option("stop-service"));
-        if !disabled && listener.is_none() {
-            port = get_direct_port();
-            match hbb_common::tcp::listen_any(port as _).await {
+        ) || stopped;
+        let port = u16::try_from(get_direct_port()).ok();
+        #[cfg(windows)]
+        let desired = if disabled {
+            None
+        } else {
+            crate::tailnet::adapter_addresses()
+                .into_iter()
+                .find(|ip| _ipv4 == Some(ip.is_ipv4()))
+                .zip(port)
+                .map(|(ip, port)| std::net::SocketAddr::new(ip, port))
+        };
+        #[cfg(not(windows))]
+        let desired = port
+            .filter(|_| !disabled)
+            .map(|port| std::net::SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, port)));
+        if desired != bind_addr {
+            listener = None;
+            bind_addr = desired;
+        }
+        if let Some(addr) = desired.filter(|_| listener.is_none()) {
+            #[cfg(windows)]
+            let bound = hbb_common::tcp::new_listener(addr, false).await;
+            #[cfg(not(windows))]
+            let bound = hbb_common::tcp::listen_any(addr.port()).await;
+            match bound {
                 Ok(l) => {
                     listener = Some(l);
                     log::info!(
@@ -1420,27 +1466,17 @@ async fn direct_server(server: ServerPtr) {
                 }
                 Err(err) => {
                     // to-do: pass to ui
-                    log::error!(
-                        "Failed to start direct server on port: {}, error: {}",
-                        port,
-                        err
-                    );
-                    loop {
-                        if port != get_direct_port() {
-                            break;
-                        }
-                        sleep(1.).await;
-                    }
+                    log::error!("Failed to start direct server on {}: {}", addr, err);
+                    sleep(3.).await;
                 }
             }
         }
         if let Some(l) = listener.as_mut() {
-            if disabled || port != get_direct_port() {
-                log::info!("Exit direct access listen");
-                listener = None;
-                continue;
-            }
             if let Ok(Ok((stream, addr))) = hbb_common::timeout(1000, l.accept()).await {
+                #[cfg(windows)]
+                if !crate::tailnet::contains(addr.ip()) {
+                    continue;
+                }
                 stream.set_nodelay(true).ok();
                 log::info!("direct access from {}", addr);
                 let local_addr = stream

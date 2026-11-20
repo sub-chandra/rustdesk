@@ -1,10 +1,10 @@
 use crate::client::translate;
 #[cfg(windows)]
 use crate::ipc::Data;
+use base::config::keys;
 #[cfg(windows)]
 use hbb_common::tokio;
 use hbb_common::{allow_err, log};
-use base::config::keys;
 use std::sync::{Arc, Mutex};
 #[cfg(windows)]
 use std::time::Duration;
@@ -27,6 +27,8 @@ fn make_tray() -> hbb_common::ResultType<()> {
     // https://github.com/tauri-apps/tray-icon/blob/dev/examples/tao.rs
     use hbb_common::anyhow::Context;
     use tao::event_loop::{ControlFlow, EventLoopBuilder};
+    #[cfg(windows)]
+    use tray_icon::menu::Submenu;
     use tray_icon::{
         menu::{Menu, MenuEvent, MenuItem},
         TrayIcon, TrayIconBuilder, TrayIconEvent as TrayEvent,
@@ -64,13 +66,16 @@ fn make_tray() -> hbb_common::ResultType<()> {
     let mut event_loop = EventLoopBuilder::new().build();
 
     let tray_menu = Menu::new();
-    let hide_stop_service = crate::ui_interface::get_builtin_option(
-        keys::OPTION_HIDE_STOP_SERVICE,
-    ) == "Y";
+    let hide_stop_service =
+        crate::ui_interface::get_builtin_option(keys::OPTION_HIDE_STOP_SERVICE) == "Y";
     // The tray icon is only shown when the service is running, so we don't need to check
     // the `stop-service` option here.
     let quit_i = if !hide_stop_service {
-        Some(MenuItem::new(translate("Stop service".to_owned()), true, None))
+        Some(MenuItem::new(
+            translate("Stop service".to_owned()),
+            true,
+            None,
+        ))
     } else {
         None
     };
@@ -80,6 +85,16 @@ fn make_tray() -> hbb_common::ResultType<()> {
     } else {
         tray_menu.append_items(&[&open_i]).ok();
     }
+    #[cfg(windows)]
+    let recent = Submenu::new(translate("Recent sessions".to_owned()), false);
+    #[cfg(windows)]
+    tray_menu.append(&recent)?;
+    #[cfg(windows)]
+    let mut recent_items: Vec<(MenuItem, String)> = Vec::new();
+    #[cfg(windows)]
+    let mut recent_files = Vec::new();
+    #[cfg(windows)]
+    let mut refresh_recent = std::time::Instant::now();
     let tooltip = |count: usize| {
         if count == 0 {
             format!(
@@ -187,7 +202,46 @@ fn make_tray() -> hbb_common::ResultType<()> {
             }
         }
 
+        #[cfg(windows)]
+        if refresh_recent <= std::time::Instant::now() {
+            use hbb_common::config::PeerConfig;
+
+            refresh_recent = std::time::Instant::now() + Duration::from_secs(3);
+            let files: Vec<_> = PeerConfig::get_vec_id_modified_time_path(&None)
+                .into_iter()
+                .filter(|(id, _, _)| crate::tailnet::endpoint(id).is_some())
+                .take(8)
+                .collect();
+            if files != recent_files {
+                for (item, _) in recent_items.drain(..) {
+                    let _ = recent.remove(&item);
+                }
+                for (id, _, peer) in PeerConfig::batch_peers(&files, 0, None).0 {
+                    let name = peer
+                        .options
+                        .get("alias")
+                        .filter(|name| !name.is_empty())
+                        .unwrap_or(&peer.info.hostname);
+                    let label = if name.is_empty() {
+                        id.clone()
+                    } else {
+                        format!("{name} ({id})")
+                    };
+                    let item = MenuItem::new(label.replace('&', "&&"), true, None);
+                    if recent.append(&item).is_ok() {
+                        recent_items.push((item, id));
+                    }
+                }
+                recent.set_enabled(!recent_items.is_empty());
+                recent_files = files;
+            }
+        }
         if let Ok(event) = menu_channel.try_recv() {
+            #[cfg(windows)]
+            if let Some((_, id)) = recent_items.iter().find(|(item, _)| event.id == item.id()) {
+                allow_err!(crate::run_me(vec!["--connect", id.as_str()]));
+                return;
+            }
             if let Some(quit_i) = &quit_i {
                 if event.id == quit_i.id() {
                     /* failed in windows, seems no permission to check system process

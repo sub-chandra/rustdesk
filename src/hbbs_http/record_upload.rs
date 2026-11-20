@@ -21,7 +21,7 @@ lazy_static::lazy_static! {
 }
 
 pub fn is_enable() -> bool {
-    ENABLE.lock().unwrap().clone()
+    !crate::tailnet::ENABLED && *ENABLE.lock().unwrap()
 }
 
 pub fn run(rx: Receiver<RecordState>) {
