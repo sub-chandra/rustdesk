@@ -1132,17 +1132,20 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   Widget _tailnetTrust() {
     const option = 'tailnet-passwordless-peers';
     final peers = bind.mainGetOptionSync(key: option);
+    final disabled = peers == 'disabled';
     final chinese = Localizations.localeOf(context).languageCode == 'zh';
     return _Card(title: 'Tailscale', children: [
       ListTile(
         title: Text(chinese ? '允许免密控制的设备' : 'Passwordless desktop access'),
-        subtitle: Text(peers.isEmpty
-            ? (chinese ? '未设置授权设备' : 'No devices authorized')
-            : peers),
+        subtitle: Text(disabled
+            ? (chinese ? '免密已关闭' : 'Passwordless access is off')
+            : peers.isEmpty
+                ? (chinese ? '使用构建默认授权' : 'Using the build defaults')
+                : peers),
         trailing: const Icon(Icons.edit_outlined),
         onTap: locked ? null : () async {
           final key = GlobalKey<FormState>();
-          var input = peers;
+          var input = disabled ? '' : peers;
           final allowed = await showDialog<String>(
             context: context,
             builder: (dialog) => AlertDialog(
@@ -1154,7 +1157,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                   onChanged: (value) => input = value,
                   maxLines: 3,
                   decoration: InputDecoration(
-                    labelText: chinese ? '控制端的 Tailscale IP，逗号或换行分隔' : 'Controller Tailscale IPs, separated by commas or lines',
+                    labelText: chinese ? '额外授权的控制端 IP' : 'Additional Tailscale controller IPs',
+                    helperText: chinese ? '逗号分隔，留空保存会关闭免密' : 'Separate with commas. Saving an empty list turns access off.',
                   ),
                   validator: (value) => splitTailnetIps(value ?? '').every((entry) {
                     final ip = InternetAddress.tryParse(entry);
@@ -1163,10 +1167,15 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                 ),
               ),
               actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog, ''),
+                  child: Text(chinese ? '恢复默认' : 'Restore defaults'),
+                ),
                 TextButton(onPressed: () => Navigator.pop(dialog), child: Text(translate('Cancel'))),
                 FilledButton(onPressed: () {
                   if (key.currentState?.validate() == true) {
-                    Navigator.pop(dialog, splitTailnetIps(input).toSet().join(','));
+                    final addresses = splitTailnetIps(input).toSet().join(',');
+                    Navigator.pop(dialog, addresses.isEmpty ? 'disabled' : addresses);
                   }
                 }, child: Text(translate('Save'))),
               ],

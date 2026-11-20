@@ -40,19 +40,33 @@ fn trusted_address(allowlist: &str, ip: std::net::IpAddr) -> bool {
         .any(|entry| entry.trim().parse::<std::net::IpAddr>() == Ok(ip))
 }
 
-pub(crate) fn passwordless_desktop(peer: &str) -> bool {
+#[cfg(any(windows, test))]
+fn paired_desktops(pair: &str, local: std::net::IpAddr, peer: std::net::IpAddr) -> bool {
+    let Some((first, second)) = pair.split_once(';') else {
+        return false;
+    };
+    (trusted_address(first, local) && trusted_address(second, peer))
+        || (trusted_address(second, local) && trusted_address(first, peer))
+}
+
+pub(crate) fn passwordless_desktop(peer: &str, local: std::net::IpAddr) -> bool {
     #[cfg(windows)]
     if let Ok(ip) = peer.parse::<IpAddr>() {
-        return contains(ip)
+        let addresses = hbb_common::config::Config::get_option(
+            base::config::keys::OPTION_TAILNET_PASSWORDLESS_PEERS,
+        );
+        return addresses != "disabled"
+            && contains(local)
+            && contains(ip)
             && route_uses_adapter(ip)
-            && trusted_address(
-                &hbb_common::config::Config::get_option(
-                    base::config::keys::OPTION_TAILNET_PASSWORDLESS_PEERS,
-                ),
-                ip,
-            );
+            && (trusted_address(&addresses, ip)
+                || paired_desktops(
+                    option_env!("RUSTDESK_TAILNET_PAIRED_DESKTOPS").unwrap_or_default(),
+                    local,
+                    ip,
+                ));
     }
-    let _ = peer;
+    let _ = (peer, local);
     false
 }
 
@@ -168,7 +182,7 @@ pub(crate) fn adapter_addresses() -> Vec<IpAddr> {
 
 #[cfg(test)]
 mod tests {
-    use super::trusted_address;
+    use super::{paired_desktops, trusted_address};
 
     #[test]
     fn only_exact_tailscale_devices_grant_passwordless_access() {
@@ -180,5 +194,20 @@ mod tests {
         assert!(!trusted_address("", ipv4));
         assert!(!trusted_address("100.64.0.0/10,0.0.0.0,*", ipv4));
         assert!(!trusted_address("100.64.0.100", ipv4));
+    }
+
+    #[test]
+    fn baked_pair_only_authorizes_connections_between_the_two_devices() {
+        let pair = "100.64.0.10,fd7a:115c:a1e0::10;100.64.0.11,fd7a:115c:a1e0::11";
+        let first = "100.64.0.10".parse().unwrap();
+        let second = "fd7a:115c:a1e0::11".parse().unwrap();
+        let third = "100.64.0.12".parse().unwrap();
+
+        assert!(paired_desktops(pair, first, second));
+        assert!(paired_desktops(pair, second, first));
+        assert!(!paired_desktops(pair, first, first));
+        assert!(!paired_desktops(pair, first, third));
+        assert!(!paired_desktops(pair, third, first));
+        assert!(!paired_desktops("", first, second));
     }
 }

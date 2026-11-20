@@ -64,20 +64,27 @@ only after verifying the network path.
 Closing the main window hides it. Starting the app recreates the Windows
 tray icon when needed. The service menu controls incoming desktop access.
 
-Under Settings → Security → Tailscale, authorize each controller by its
-exact Tailscale IP. An authorized direct desktop connection uses the
-controller's Tailscale address for authentication. To use it in both
-directions, add the other machine on each controlled machine. Clear the
-list to use the standard RustDesk authentication flow for all controllers.
-Keep the allowed devices limited to your own controllers.
+The custom build can grant passwordless desktop access between two named
+Tailscale devices selected at build time by their exact IPv4 and IPv6
+addresses. Both endpoints need that build. Under Settings → Security → Tailscale,
+you can add other trusted controllers, turn off passwordless access by saving
+an empty list, or restore the build defaults.
 
-On the publishing PC, open Settings → General → Update and choose the
-custom build ZIP. The app shares that file on Tailnet TCP port 21120 and
-prints the download URL. On another PC, enter the publisher's Tailscale IP
-under Download custom build. The browser can also open the displayed URL.
-Publish a new ZIP to make it the current download. The publisher must run
-RustDesk Tailnet, including when the window is hidden. The downloaded ZIP
-can be unpacked and installed on the receiving machine.
+Build the Windows native library with the private two-device list in
+`RUSTDESK_TAILNET_PAIRED_DESKTOPS`. Separate devices with a semicolon and
+addresses for each device with commas. Build Flutter with the publisher's
+Tailscale IP in `TAILNET_UPDATE_PUBLISHER` and the publisher's absolute
+`releases/RustDeskTailnet-windows-x64.zip` path in `TAILNET_RELEASE_ZIP`.
+Pass the last two values through `--dart-define`. Keep device addresses in
+local build parameters.
+
+After a Windows build, run `scripts/publish-tailnet.ps1` from the project.
+It writes `releases/RustDeskTailnet-windows-x64.zip` in the repository root.
+The configured publisher serves that file on Tailnet TCP port 21120 while
+RustDesk Tailnet runs, including when its window is hidden. On controllers,
+Settings → General → Update → Download custom build uses the configured
+publisher and opens a save dialog. Installing the downloaded build is a
+separate step.
 
 For a connection stuck at connecting, verify which executable listens on
 the direct-access port on the controlled PC. A reachable TCP port and a

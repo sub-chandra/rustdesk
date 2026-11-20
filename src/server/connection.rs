@@ -3044,7 +3044,9 @@ impl Connection {
                 crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
                     && is_logon();
 
-            if desktop_login && crate::tailnet::passwordless_desktop(&self.ip) {
+            if desktop_login
+                && crate::tailnet::passwordless_desktop(&self.ip, self.stream.local_addr().ip())
+            {
                 if !self.send_logon_response_and_keep_alive().await {
                     return false;
                 }

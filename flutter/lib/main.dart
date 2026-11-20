@@ -136,7 +136,7 @@ void runMainApp(bool startService) async {
   // register uni links
   await initEnv(kAppTypeMain);
   if (isWindows) {
-    await TailnetPackageServer.instance.restore();
+    await TailnetPackageServer.instance.start();
   } else {
     checkUpdate();
   }
