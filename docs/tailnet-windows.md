@@ -58,3 +58,28 @@ Tailscale path avoids DERP latency. Keep the host TCP port limited to the
 intended controller through tailnet grants. Use the existing RustDesk
 authentication on top of Tailscale, and compare capture and codec settings
 only after verifying the network path.
+
+## Tray, trusted controllers, and custom packages
+
+Closing the main window hides it. Starting the app recreates the Windows
+tray icon when needed. The service menu controls incoming desktop access.
+
+Under Settings → Security → Tailscale, authorize each controller by its
+exact Tailscale IP. An authorized direct desktop connection uses the
+controller's Tailscale address for authentication. To use it in both
+directions, add the other machine on each controlled machine. Clear the
+list to use the standard RustDesk authentication flow for all controllers.
+Keep the allowed devices limited to your own controllers.
+
+On the publishing PC, open Settings → General → Update and choose the
+custom build ZIP. The app shares that file on Tailnet TCP port 21120 and
+prints the download URL. On another PC, enter the publisher's Tailscale IP
+under Download custom build. The browser can also open the displayed URL.
+Publish a new ZIP to make it the current download. The publisher must run
+RustDesk Tailnet, including when the window is hidden. The downloaded ZIP
+can be unpacked and installed on the receiving machine.
+
+For a connection stuck at connecting, verify which executable listens on
+the direct-access port on the controlled PC. A reachable TCP port and a
+working Tailscale ping establish network connectivity. The controlled
+RustDesk process still needs to send its handshake before authentication.

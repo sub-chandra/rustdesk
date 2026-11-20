@@ -4105,17 +4105,62 @@ sc start {app_name}
     }
 }
 
+pub(crate) fn start_tailnet_tray() -> io::Result<()> {
+    let exe = std::env::current_exe()?;
+    launch_without_inheriting(&exe, "--tray")
+}
+
+fn launch_without_inheriting(exe: &Path, args: &str) -> io::Result<()> {
+    use winapi::um::processthreadsapi::CreateProcessW;
+
+    let executable = wide_string(&exe.to_string_lossy());
+    let mut command = wide_string(&format!("\"{}\" {args}", exe.display()));
+    unsafe {
+        let mut startup: STARTUPINFOW = mem::zeroed();
+        startup.cb = mem::size_of::<STARTUPINFOW>() as _;
+        let mut process: PROCESS_INFORMATION = mem::zeroed();
+        // A restart helper must not keep the old process's listeners open.
+        if CreateProcessW(
+            executable.as_ptr(),
+            command.as_mut_ptr(),
+            null_mut(),
+            null_mut(),
+            FALSE,
+            CREATE_NO_WINDOW,
+            null_mut(),
+            std::ptr::null(),
+            &mut startup,
+            &mut process,
+        ) == FALSE
+        {
+            return Err(io::Error::last_os_error());
+        }
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+    }
+    Ok(())
+}
+
+fn relaunch_tailnet(exe: &str) -> io::Result<()> {
+    use winapi::um::sysinfoapi::GetSystemDirectoryW;
+
+    let mut system = [0u16; MAX_PATH];
+    let size = unsafe { GetSystemDirectoryW(system.as_mut_ptr(), system.len() as _) } as usize;
+    if size == 0 || size >= system.len() {
+        return Err(io::Error::last_os_error());
+    }
+    let command = PathBuf::from(OsString::from_wide(&system[..size])).join("cmd.exe");
+    launch_without_inheriting(&command, &format!("/d /c timeout /t 2 & \"{exe}\""))
+}
+
 fn run_after_run_cmds(silent: bool) {
     let (_, _, _, exe) = get_install_info();
     if !silent {
         log::debug!("Spawn new window");
-        allow_err!(std::process::Command::new("cmd")
-            .args(&["/c", "timeout", "/t", "2", "&", &format!("{exe}")])
-            .creation_flags(winapi::um::winbase::CREATE_NO_WINDOW)
-            .spawn());
+        allow_err!(relaunch_tailnet(&exe));
     }
     if Config::get_option("stop-service") != "Y" {
-        allow_err!(std::process::Command::new(&exe).arg("--tray").spawn());
+        allow_err!(launch_without_inheriting(Path::new(&exe), "--tray"));
     }
     std::thread::sleep(std::time::Duration::from_millis(300));
 }

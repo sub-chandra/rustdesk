@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,6 +7,7 @@ import 'package:bot_toast/bot_toast.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/desktop/pages/tailnet_updates.dart';
 import 'package:flutter_hbb/common/widgets/overlay.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/install_page.dart';
@@ -109,7 +111,7 @@ Future<void> main(List<String> args) async {
   } else {
     desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
-    windowManager.setPreventClose(true);
+    await windowManager.setPreventClose(true);
     if (isMacOS) {
       disableWindowMovable(kWindowId);
     }
@@ -133,7 +135,11 @@ Future<void> initEnv(String appType) async {
 void runMainApp(bool startService) async {
   // register uni links
   await initEnv(kAppTypeMain);
-  if (!isWindows) checkUpdate();
+  if (isWindows) {
+    await TailnetPackageServer.instance.restore();
+  } else {
+    checkUpdate();
+  }
   // trigger connection status updater
   await bind.mainCheckConnectStatus();
   if (startService) {

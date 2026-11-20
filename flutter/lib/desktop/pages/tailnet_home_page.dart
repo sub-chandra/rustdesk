@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import 'desktop_tab_page.dart';
+import 'tailnet_local.dart';
 
 const _manualDevicesKey = 'tailnet-devices';
 const _defaultPort = 21118;
@@ -34,16 +34,7 @@ class _Endpoint {
     if (address == null || port < 1 || port > 65535 || id.contains('%')) {
       return null;
     }
-    final bytes = address.rawAddress;
-    final allowed = bytes.length == 4
-        ? bytes[0] == 100 && bytes[1] >= 64 && bytes[1] < 128
-        : bytes[0] == 0xfd &&
-            bytes[1] == 0x7a &&
-            bytes[2] == 0x11 &&
-            bytes[3] == 0x5c &&
-            bytes[4] == 0xa1 &&
-            bytes[5] == 0xe0;
-    return allowed ? _Endpoint(id, address, port) : null;
+    return isTailnetAddress(address) ? _Endpoint(id, address, port) : null;
   }
 }
 
@@ -118,20 +109,7 @@ class _TailnetHomePageState extends State<TailnetHomePage> {
     var self = <_Endpoint>[];
     var running = false;
     try {
-      final folders = Platform.environment;
-      final programFiles = folders['ProgramW6432'] ?? folders['ProgramFiles'];
-      final executable = programFiles == null
-          ? null
-          : '$programFiles\\Tailscale\\tailscale.exe';
-      if (executable == null || !await File(executable).exists()) return;
-      final result = await Process.run(
-        executable,
-        ['status', '--json'],
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
-      ).timeout(const Duration(seconds: 5));
-      if (result.exitCode != 0) return;
-      final state = jsonDecode(result.stdout as String) as Map<String, dynamic>;
+      final state = await readTailnetStatus();
       running = state['BackendState'] == 'Running';
       if (!running) return;
       self = _addresses(state['Self']?['TailscaleIPs']).toList();

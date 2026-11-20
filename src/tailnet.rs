@@ -33,6 +33,29 @@ pub(crate) fn contains(ip: IpAddr) -> bool {
     }
 }
 
+#[cfg(any(windows, test))]
+fn trusted_address(allowlist: &str, ip: std::net::IpAddr) -> bool {
+    allowlist
+        .split(',')
+        .any(|entry| entry.trim().parse::<std::net::IpAddr>() == Ok(ip))
+}
+
+pub(crate) fn passwordless_desktop(peer: &str) -> bool {
+    #[cfg(windows)]
+    if let Ok(ip) = peer.parse::<IpAddr>() {
+        return contains(ip)
+            && route_uses_adapter(ip)
+            && trusted_address(
+                &hbb_common::config::Config::get_option(
+                    base::config::keys::OPTION_TAILNET_PASSWORDLESS_PEERS,
+                ),
+                ip,
+            );
+    }
+    let _ = peer;
+    false
+}
+
 #[cfg(windows)]
 pub(crate) fn endpoint(peer: &str) -> Option<SocketAddr> {
     let address = peer.parse::<IpAddr>().map_or_else(
@@ -141,4 +164,21 @@ pub(crate) fn adapter_addresses() -> Vec<IpAddr> {
         FreeMibTable(table.cast());
     }
     addresses
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trusted_address;
+
+    #[test]
+    fn only_exact_tailscale_devices_grant_passwordless_access() {
+        let ipv4 = "100.64.0.10".parse().unwrap();
+        let ipv6 = "fd7a:115c:a1e0::10".parse().unwrap();
+
+        assert!(trusted_address("100.64.0.11, 100.64.0.10", ipv4));
+        assert!(trusted_address("fd7a:115c:a1e0:0::10", ipv6));
+        assert!(!trusted_address("", ipv4));
+        assert!(!trusted_address("100.64.0.0/10,0.0.0.0,*", ipv4));
+        assert!(!trusted_address("100.64.0.100", ipv4));
+    }
 }
