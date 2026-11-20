@@ -72,10 +72,8 @@ class _TailnetHomePageState extends State<TailnetHomePage> {
   Timer? _timer;
   bool _reading = false;
   bool _running = false;
-  bool _checkingUpdate = false;
   bool _probing = false;
   String? _probeResult;
-  String? _updateResult;
 
   bool get _zh => Localizations.localeOf(context).languageCode == 'zh';
   String _t(String zh, String en) => _zh ? zh : en;
@@ -301,51 +299,6 @@ class _TailnetHomePageState extends State<TailnetHomePage> {
     }
   }
 
-  Future<void> _checkUpdate() async {
-    setState(() {
-      _checkingUpdate = true;
-      _updateResult = null;
-    });
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 5)
-      ..findProxy = (_) => 'DIRECT';
-    var result = _t('检查失败，请重试', 'Check failed. Try again.');
-    try {
-      final request = await client.getUrl(Uri.https(
-        'api.github.com',
-        '/repos/rustdesk/rustdesk/releases/latest',
-      ));
-      request
-        ..followRedirects = false
-        ..headers.set(HttpHeaders.userAgentHeader, 'RustDeskTailnet');
-      final response =
-          await request.close().timeout(const Duration(seconds: 5));
-      if (response.statusCode == HttpStatus.ok) {
-        final tag = jsonDecode(await response
-            .transform(utf8.decoder)
-            .join()
-            .timeout(const Duration(seconds: 5)))['tag_name'];
-        if (tag is String && RegExp(r'^v?\d+\.\d+\.\d+$').hasMatch(tag)) {
-          final base = await bind.mainGetVersion();
-          result = tag.replaceFirst('v', '') == base.split('+').first
-              ? _t('已基于官方最新版 $tag', 'Based on the latest official release $tag')
-              : _t('本版基于 $base · 官方最新版 $tag',
-                  'Based on $base · latest official release $tag');
-        }
-      }
-    } catch (_) {
-      // The error text remains visible in the home page.
-    } finally {
-      client.close(force: true);
-      if (mounted) {
-        setState(() {
-          _checkingUpdate = false;
-          _updateResult = result;
-        });
-      }
-    }
-  }
-
   String _status(_Device device) => switch (device.online) {
         true => _t('在线', 'Online'),
         false => _t('离线', 'Offline'),
@@ -502,27 +455,19 @@ class _TailnetHomePageState extends State<TailnetHomePage> {
               if (!bind.mainIsInstalled() && !bind.isDisableInstallation())
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: () => bind.mainGotoInstall(),
-                    icon: const Icon(Icons.desktop_windows_outlined),
-                    label: Text(_t('安装为被控服务', 'Install for unattended access')),
+                  child: Tooltip(
+                    message: _t(
+                      '让这台电脑重启后、登录 Windows 前也可接受远程连接',
+                      'Accept remote connections after restart, before signing in to Windows.',
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () => bind.mainGotoInstall(),
+                      icon: const Icon(Icons.desktop_windows_outlined),
+                      label: Text(_t('安装 Windows 后台服务',
+                          'Install Windows background service')),
+                    ),
                   ),
                 ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _checkingUpdate ? null : _checkUpdate,
-                  icon: const Icon(Icons.system_update_alt),
-                  label: Text(_checkingUpdate
-                      ? _t('正在检查…', 'Checking…')
-                      : _t('检查 RustDesk 官方更新',
-                          'Check official RustDesk releases')),
-                ),
-              ),
-              if (_updateResult != null) ...[
-                const SizedBox(height: 8),
-                Text(_updateResult!),
-              ],
             ],
           ),
         ),

@@ -404,10 +404,16 @@ class _General extends StatefulWidget {
 }
 
 class _GeneralState extends State<_General> {
-  final RxBool serviceStop =
-      isWeb ? RxBool(false) : Get.find<RxBool>(tag: 'stop-service');
+  final RxBool? _sharedServiceStop =
+      Get.isRegistered<RxBool>(tag: kOptionStopService)
+          ? Get.find<RxBool>(tag: kOptionStopService)
+          : null;
+  late final RxBool serviceStop = _sharedServiceStop ??
+      RxBool(!isWeb && mainGetBoolOptionSync(kOptionStopService));
   RxBool serviceBtnEnabled = true.obs;
   final GlobalKey _minToolbarOptionKey = GlobalKey();
+  bool _checkingUpdate = false;
+  String? _updateResult;
 
   @override
   Widget build(BuildContext context) {
@@ -416,6 +422,7 @@ class _GeneralState extends State<_General> {
       controller: scrollController,
       children: [
         if (!isWeb) service(),
+        if (isWindows) _officialUpdate(),
         theme(),
         _Card(title: 'Language', children: [language()]),
         if (!isWeb) hwcodec(),
@@ -510,7 +517,14 @@ class _GeneralState extends State<_General> {
         _Button(serviceStop.value ? 'Start' : 'Stop', () {
           () async {
             serviceBtnEnabled.value = false;
-            await start_service(serviceStop.value);
+            if (isWindows && _sharedServiceStop == null) {
+              await mainSetBoolOption(kOptionStopService, !serviceStop.value);
+              if (mounted) {
+                serviceStop.value = await mainGetBoolOption(kOptionStopService);
+              }
+            } else {
+              await start_service(serviceStop.value);
+            }
             // enable the button after 1 second
             Future.delayed(const Duration(seconds: 1), () {
               serviceBtnEnabled.value = true;
@@ -519,6 +533,68 @@ class _GeneralState extends State<_General> {
         }, enabled: serviceBtnEnabled.value)
       ]);
     });
+  }
+
+  Widget _officialUpdate() {
+    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
+    return _Card(title: 'Update', children: [
+      OutlinedButton.icon(
+        onPressed: _checkingUpdate ? null : _checkUpdate,
+        icon: const Icon(Icons.system_update_alt),
+        label: Text(_checkingUpdate
+            ? (isChinese ? '正在检查…' : 'Checking…')
+            : (isChinese
+                ? '检查 RustDesk 官方更新'
+                : 'Check official RustDesk releases')),
+      ),
+      if (_updateResult != null) Text(_updateResult!),
+    ]);
+  }
+
+  Future<void> _checkUpdate() async {
+    final isChinese = Localizations.localeOf(context).languageCode == 'zh';
+    String text(String zh, String en) => isChinese ? zh : en;
+    setState(() {
+      _checkingUpdate = true;
+      _updateResult = null;
+    });
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 5)
+      ..findProxy = (_) => 'DIRECT';
+    var result = text('检查失败，请重试', 'Check failed. Try again.');
+    try {
+      final request = await client.getUrl(Uri.https(
+        'api.github.com',
+        '/repos/rustdesk/rustdesk/releases/latest',
+      ));
+      request
+        ..followRedirects = false
+        ..headers.set(HttpHeaders.userAgentHeader, 'RustDeskTailnet');
+      final response =
+          await request.close().timeout(const Duration(seconds: 5));
+      if (response.statusCode == HttpStatus.ok) {
+        final tag = jsonDecode(await response
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 5)))['tag_name'];
+        if (tag is String && RegExp(r'^v?\d+\.\d+\.\d+$').hasMatch(tag)) {
+          final base = await bind.mainGetVersion();
+          result = tag.replaceFirst('v', '') == base.split('+').first
+              ? text('已基于官方最新版 $tag', 'Based on the latest official release $tag')
+              : text('本版基于 $base · 官方最新版 $tag',
+                  'Based on $base · latest official release $tag');
+        }
+      }
+    } catch (_) {
+    } finally {
+      client.close(force: true);
+      if (mounted) {
+        setState(() {
+          _checkingUpdate = false;
+          _updateResult = result;
+        });
+      }
+    }
   }
 
   Widget other() {

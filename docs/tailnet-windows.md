@@ -18,7 +18,7 @@ git merge <official-release-tag>
 git push origin custom/tailnet
 ```
 
-The home-page update button compares the build with GitHub's latest stable
+The update button under Settings → General compares the build with GitHub's latest stable
 RustDesk release. It sends a version lookup to `api.github.com` when clicked
 and displays the release version. RustDesk registration, relay, NAT probes, account
 requests, LAN discovery, and automatic updates are disabled in this build.
@@ -48,6 +48,8 @@ history. Keep both configuration directories outside source control.
 
 While the original controlled service is using 21118, test the custom build on
 21119 from the controller using the host's Tailscale IP and the explicit port.
+The Windows background service starts with Windows and accepts incoming
+connections before sign-in, subject to the configured RustDesk authentication.
 Successful login and restart tests should precede switching the production
 listener. The Windows adapter must be named `Tailscale`.
 
