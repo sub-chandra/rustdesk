@@ -14,11 +14,6 @@ bool isTailnetAddress(InternetAddress address) {
       bytes[5] == 0xe0;
 }
 
-Iterable<String> splitTailnetIps(String value) => value
-    .split(RegExp(r'[,，\r\n]+'))
-    .map((part) => part.trim())
-    .where((part) => part.isNotEmpty);
-
 Future<Map<String, dynamic>> readTailnetStatus() async {
   final folders = Platform.environment;
   final programFiles = folders['ProgramW6432'] ?? folders['ProgramFiles'];

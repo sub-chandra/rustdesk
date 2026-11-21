@@ -59,20 +59,18 @@ intended controller through tailnet grants. Use the existing RustDesk
 authentication on top of Tailscale, and compare capture and codec settings
 only after verifying the network path.
 
-## Tray, trusted controllers, and custom packages
+## Tray, password settings, and custom packages
 
 Closing the main window hides it. Starting the app recreates the Windows
 tray icon when needed. The service menu controls incoming desktop access.
 
-The custom build can grant passwordless desktop access between two named
-Tailscale devices selected at build time by their exact IPv4 and IPv6
-addresses. Both endpoints need that build. Under Settings → Security → Tailscale,
-you can add other trusted controllers, turn off passwordless access by saving
-an empty list, or restore the build defaults.
+The Windows desktop receiver starts when its backend starts. Launching a
+second copy from a build folder opens the installed application when present.
+Use Settings → Security to choose and set the RustDesk authentication
+method. The installed app and its Windows service share that setting over
+the authenticated local Windows IPC channel.
 
-Build the Windows native library with the private two-device list in
-`RUSTDESK_TAILNET_PAIRED_DESKTOPS`. Separate devices with a semicolon and
-addresses for each device with commas. Build Flutter with the publisher's
+Build Flutter with the publisher's
 Tailscale IP in `TAILNET_UPDATE_PUBLISHER` and the publisher's absolute
 `releases/RustDeskTailnet-windows-x64.zip` path in `TAILNET_RELEASE_ZIP`.
 Pass the last two values through `--dart-define`. Keep device addresses in

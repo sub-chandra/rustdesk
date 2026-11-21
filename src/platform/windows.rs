@@ -4105,6 +4105,11 @@ sc start {app_name}
     }
 }
 
+pub(crate) fn open_installed_tailnet() -> io::Result<()> {
+    let (_, _, _, exe) = get_install_info();
+    launch_without_inheriting(Path::new(&exe), "")
+}
+
 pub(crate) fn start_tailnet_tray() -> io::Result<()> {
     let exe = std::env::current_exe()?;
     launch_without_inheriting(&exe, "--tray")

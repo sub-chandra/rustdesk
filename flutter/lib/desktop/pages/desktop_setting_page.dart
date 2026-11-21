@@ -13,7 +13,6 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/common/widgets/keyboard_shortcuts/page_body.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_keyboard_shortcuts_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
-import 'package:flutter_hbb/desktop/pages/tailnet_local.dart';
 import 'package:flutter_hbb/desktop/pages/tailnet_updates.dart';
 import 'package:flutter_hbb/desktop/widgets/remote_toolbar.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
@@ -1117,7 +1116,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               block: locked,
               child: Column(children: [
                 permissions(context),
-                if (isWindows) _tailnetTrust(),
                 password(context),
                 _Card(title: '2FA', children: [tfa()]),
                 if (!isChangeIdDisabled())
@@ -1127,66 +1125,6 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             ),
           ],
         )).marginOnly(bottom: _kListViewBottomMargin);
-  }
-
-  Widget _tailnetTrust() {
-    const option = 'tailnet-passwordless-peers';
-    final peers = bind.mainGetOptionSync(key: option);
-    final disabled = peers == 'disabled';
-    final chinese = Localizations.localeOf(context).languageCode == 'zh';
-    return _Card(title: 'Tailscale', children: [
-      ListTile(
-        title: Text(chinese ? '允许免密控制的设备' : 'Passwordless desktop access'),
-        subtitle: Text(disabled
-            ? (chinese ? '免密已关闭' : 'Passwordless access is off')
-            : peers.isEmpty
-                ? (chinese ? '使用构建默认授权' : 'Using the build defaults')
-                : peers),
-        trailing: const Icon(Icons.edit_outlined),
-        onTap: locked ? null : () async {
-          final key = GlobalKey<FormState>();
-          var input = disabled ? '' : peers;
-          final allowed = await showDialog<String>(
-            context: context,
-            builder: (dialog) => AlertDialog(
-              title: Text(chinese ? '授权 Tailscale 设备' : 'Authorize Tailscale devices'),
-              content: Form(
-                key: key,
-                child: TextFormField(
-                  initialValue: input,
-                  onChanged: (value) => input = value,
-                  maxLines: 3,
-                  decoration: InputDecoration(
-                    labelText: chinese ? '额外授权的控制端 IP' : 'Additional Tailscale controller IPs',
-                    helperText: chinese ? '逗号分隔，留空保存会关闭免密' : 'Separate with commas. Saving an empty list turns access off.',
-                  ),
-                  validator: (value) => splitTailnetIps(value ?? '').every((entry) {
-                    final ip = InternetAddress.tryParse(entry);
-                    return ip != null && isTailnetAddress(ip);
-                  }) ? null : (chinese ? '请输入完整的 Tailscale IP' : 'Enter complete Tailscale IP addresses'),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialog, ''),
-                  child: Text(chinese ? '恢复默认' : 'Restore defaults'),
-                ),
-                TextButton(onPressed: () => Navigator.pop(dialog), child: Text(translate('Cancel'))),
-                FilledButton(onPressed: () {
-                  if (key.currentState?.validate() == true) {
-                    final addresses = splitTailnetIps(input).toSet().join(',');
-                    Navigator.pop(dialog, addresses.isEmpty ? 'disabled' : addresses);
-                  }
-                }, child: Text(translate('Save'))),
-              ],
-            ),
-          );
-          if (allowed == null || !mounted) return;
-          await bind.mainSetOption(key: option, value: allowed);
-          if (mounted) setState(() {});
-        },
-      )
-    ]);
   }
 
   Widget tfa() {

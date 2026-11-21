@@ -2924,7 +2924,6 @@ impl Connection {
             if !self.check_id_whitelist().await {
                 return false;
             }
-            let desktop_login = lr.union.is_none();
             match lr.union {
                 Some(login_request::Union::FileTransfer(ft)) => {
                     if !Self::permission(
@@ -3044,14 +3043,7 @@ impl Connection {
                 crate::get_builtin_option(keys::OPTION_ALLOW_LOGON_SCREEN_PASSWORD) == "Y"
                     && is_logon();
 
-            if desktop_login
-                && crate::tailnet::passwordless_desktop(&self.ip, self.stream.local_addr().ip())
-            {
-                if !self.send_logon_response_and_keep_alive().await {
-                    return false;
-                }
-                self.try_start_cm(lr.my_id, lr.my_name, self.authorized);
-            } else if (password::approve_mode() == ApproveMode::Click && !allow_logon_screen_password)
+            if (password::approve_mode() == ApproveMode::Click && !allow_logon_screen_password)
                 || password::approve_mode() == ApproveMode::Both && !password::has_valid_password()
             {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]

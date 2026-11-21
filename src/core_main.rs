@@ -96,6 +96,19 @@ pub fn core_main() -> Option<CoreMainAction> {
         }
         i += 1;
     }
+    #[cfg(windows)]
+    if args.is_empty()
+        && !no_server
+        && !_is_elevate
+        && !_is_run_as_system
+        && crate::platform::is_installed()
+        && !crate::platform::is_cur_exe_the_installed()
+    {
+        return match crate::platform::windows::open_installed_tailnet() {
+            Ok(()) => None,
+            Err(error) => Some(CoreMainAction::ExitFailure(error.into())),
+        };
+    }
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     if args.is_empty() {
         #[cfg(target_os = "linux")]

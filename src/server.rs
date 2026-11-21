@@ -733,13 +733,26 @@ pub async fn start_server(is_server: bool, no_server: bool) {
         #[cfg(any(target_os = "macos", target_os = "linux"))]
         wait_initial_config_sync().await;
         allow_err!(crate::trusted_devices::initialize());
+        #[cfg(windows)]
+        if !hbb_common::config::is_outgoing_only() {
+            Config::set_option("stop-service".into(), String::new());
+        }
         #[cfg(target_os = "windows")]
         crate::platform::try_kill_broker();
         #[cfg(feature = "hwcodec")]
         scrap::hwcodec::start_check_process();
         crate::RendezvousMediator::start_all().await;
     } else {
-        match crate::ipc::connect(1000, "").await {
+        let connection = loop {
+            let result = crate::ipc::connect(1000, "").await;
+            #[cfg(windows)]
+            if result.is_err() && crate::platform::is_self_service_running() {
+                hbb_common::sleep(1.0).await;
+                continue;
+            }
+            break result;
+        };
+        match connection {
             Ok(mut conn) => {
                 if conn.send(&Data::SyncConfig(None)).await.is_ok() {
                     if let Ok(Some(data)) = conn.next_timeout(1000).await {
